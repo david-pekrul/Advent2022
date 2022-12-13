@@ -5,26 +5,26 @@ import helpers.Helpers
 object Day9 {
   def main(args: Array[String]): Unit = {
     def rawLines = Helpers.readFile("day9/day9.txt")
-    def instructions = rawLines.map(Instruction.parse)
 
-    val visited = Runner.process(instructions)
+    val instructions = rawLines.map(Instruction.parse)
+    //    printVisited(visited)
 
-//    printVisited(visited)
+    val part1 = Runner.process2(1,instructions).size
+    println(s"Part 1: $part1") //5710
 
-    val part1 = visited.size
-    println(s"Part 1: $part1")
-
+    val part2 = Runner.process2(9,instructions).size
+    println(s"Part 2: ${part2}") //2259
   }
 
   def printVisited(visitedCoords: Set[(Int, Int)]): Unit = {
     val rowRange = visitedCoords.map(_._1).toSeq.sorted
-    val (minRow,maxRow) = (rowRange.head,rowRange.last)
+    val (minRow, maxRow) = (rowRange.head, rowRange.last)
     val colRange = visitedCoords.map(_._2).toSeq.sorted
-    val (minCol, maxCol) = (colRange.head,colRange.last)
+    val (minCol, maxCol) = (colRange.head, colRange.last)
 
     (maxRow to minRow by -1).foreach(row => {
       (minCol to maxCol).foreach(col => {
-        if(visitedCoords.contains((row,col))){
+        if (visitedCoords.contains((row, col))) {
           print("#")
         } else {
           print(".")
@@ -36,45 +36,39 @@ object Day9 {
 }
 
 object Runner {
-  def process(instructions: Seq[Instruction]): Set[(Int, Int)] = {
+  def process2(ropeLength: Int, instructions: Seq[Instruction]): Set[(Int, Int)] = {
 
-    val firstRope = Rope.start
+    val knots: Seq[Coord] = (0 to ropeLength).map(_ => Coord(0,0))
+    val tailVisitedCoords: Set[(Int, Int)] = Set((knots.last.row,knots.last.col))
+    val allInstructions = instructions.map(_.getSeq()).flatten
 
-
-    val visitedCoords: Set[(Int, Int)] = Set(firstRope.getTailCoord())
-
-    val (finalRope, finalVisitedCoords) = instructions.map(_.getSeq()).flatten.foldLeft((Rope.start,visitedCoords))((prevInfo,instruction) => {
-      val nextRope = prevInfo._1.apply(instruction)
-      val nextVisitedCoords = prevInfo._2 + nextRope.getTailCoord()
-      (nextRope,nextVisitedCoords)
-    })
-
-    finalVisitedCoords
+    allInstructions.foldLeft((knots,tailVisitedCoords))((prevInfo,nextInstruction) => {
+      val prevKnots = prevInfo._1
+      val prevVisitedCoords = prevInfo._2
+      val headMove = prevKnots.head.add(nextInstruction.direction)
+      val updatedKnots = prevKnots.foldLeft(Seq[Coord]())((acc,next) => {
+        if(acc.isEmpty){
+          Seq(next.add(nextInstruction.direction))//move the lead knot
+        } else {
+          //follow the last knot in the accumulator
+          acc :+ next.trail(acc.last)._1
+        }
+      })
+      val updatedVisited = prevInfo._2 + updatedKnots.last.getTuple()
+      (updatedKnots,updatedVisited)
+    })._2
   }
 }
-
-object Rope {
-  def start = Rope(Coord(0, 0), Coord(0, 0))
-}
-
-case class Rope(head: Coord, tail: Coord) {
-  def apply(si: SimpleInstruction): Rope = {
-    val newHead = head.add(si.direction)
-    val newTail = tail.trail(newHead)
-    Rope(newHead, newTail)
-  }
-
-  def getTailCoord(): (Int,Int) = {
-    (tail.row, tail.col)
-  }
-}
-
 case class Coord(row: Int, col: Int) {
   def add(step: Coord): Coord = {
     Coord(row + step.row, col + step.col)
   }
 
-  def trail(head: Coord): Coord = {
+  def getTuple(): (Int,Int) = {
+    (row,col)
+  }
+
+  def trail(head: Coord): (Coord, Boolean) = {
     val deltaR = head.row - row;
     val deltaC = head.col - col;
 
@@ -92,6 +86,12 @@ case class Coord(row: Int, col: Int) {
 
 
     */
+    val noOps = (-1 to 1).map(r => {
+      (-1 to 1).map(c => {
+        (r, c)
+      })
+    }).flatten.toSet
+
     val move: Coord = (deltaR, deltaC) match {
       case (2, 1) | (1, 2) => Coord(1, 1) //C,E => C'E'
       case (0, 2) => Coord(0, 1) //G   => G'
@@ -101,9 +101,22 @@ case class Coord(row: Int, col: Int) {
       case (0, -2) => Coord(0, -1) //F   => F'
       case (1, -2) | (2, -1) => Coord(1, -1) //D,A => D'A'
       case (2, 0) => Coord(1, 0) //B   => B'
-      case _ => Coord(0, 0) //No move needed
+      //part 2 cases:
+      case (-2,-2) => Coord(-1,-1)
+      case (2,-2) => Coord(1,-1)
+      case (-2,2) => Coord(-1,1)
+      case (2,2) => Coord(1,1)
+
+      case _ => {
+        if (noOps.contains((deltaR, deltaC))) {
+          Coord(0, 0)
+        } else {
+          println(s"Can't handle ${(deltaR, deltaC)}")
+          throw new RuntimeException("unexpected move!")
+        }
+      } //No move needed
     }
-    this.add(move)
+    (this.add(move), move.col == 0 && move.row == 0)
   }
 }
 
