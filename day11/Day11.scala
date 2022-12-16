@@ -20,17 +20,31 @@ object Day11 {
 
     val part1 = after20Rounds.values.toSeq.map(_.inspectCount).sorted.reverse.slice(0,2).reduce((a,b) => a*b)
     println(s"Part 1: ${part1}")
+
+    val afterLotsOfRounds = (1 to 10000).foldLeft(monkeys)((prevMonkeys, loopCount) => {
+      val updated = Monkey.playRound(prevMonkeys,1)
+//      if(loopCount == 1 || loopCount == 20 || loopCount%1000 == 0){
+//        println(s"After $loopCount:")
+//        printMonkeys(updated)
+//      }
+      updated
+    })
+
+    val part2 = afterLotsOfRounds.values.toSeq.map(_.inspectCount.toLong).sorted.reverse.slice(0, 2).reduce((a, b) => a * b)
+    println(s"Part 2: ${part2}")
   }
 
   def printMonkeys(m: Map[Int, Monkey]): Unit = {
-    println()
     m.values.toSeq.sortBy(_.id).map(m => (m.id -> m.items, m.inspectCount)).foreach(println)
+    println()
   }
+
+
 
 }
 
-case class Monkey(id: Int, items: Seq[Int], operation: Int => Int, test: Int => Boolean, trueMonkey: Int, falseMonkey: Int, inspectCount: Int = 0) {
-  def addItems(newItems: Seq[Int]): Monkey = {
+case class Monkey(id: Int, items: Seq[Long], operation: Long => Long, test: Long => Boolean, trueMonkey: Int, falseMonkey: Int, inspectCount: Int = 0) {
+  def addItems(newItems: Seq[Long]): Monkey = {
     Monkey(id,items ++ newItems, operation, test, trueMonkey, falseMonkey, inspectCount)
   }
 
@@ -38,10 +52,14 @@ case class Monkey(id: Int, items: Seq[Int], operation: Int => Int, test: Int => 
     Monkey(id,Seq(), operation, test, trueMonkey, falseMonkey, inspectCount + items.size)
   }
 
-  def playTurn(worryDivisor: Int): Map[Int, Seq[Int]] = {
+  def playTurn(worryDivisor: Int): Map[Int, Seq[Long]] = {
     items
       .map(item => {
-        val newWorryLevel = operation(item) / worryDivisor
+        val afterOp = operation(item)
+        if(afterOp < 0){
+          throw new RuntimeException("OVERFLOW!")
+        }
+        val newWorryLevel = (afterOp / worryDivisor) % Monkey.modValue
         val updatedMonkey = if (test(newWorryLevel)) {
           trueMonkey -> newWorryLevel
         } else {
@@ -49,13 +67,16 @@ case class Monkey(id: Int, items: Seq[Int], operation: Int => Int, test: Int => 
         }
         updatedMonkey
       })
-      .foldLeft(Map[Int, Seq[Int]]())((acc, next) => {
+      .foldLeft(Map[Int, Seq[Long]]())((acc, next) => {
         acc.updated(next._1, acc.getOrElse(next._1, Seq()) :+ next._2)
       })
   }
 }
 
 object Monkey {
+
+  var modValue: Int = 1
+
   def parseMonkeys(input: Iterator[String]): Map[Int, Monkey] = {
     var monkeys: Seq[Monkey] = Seq()
     while (input.hasNext) {
@@ -82,18 +103,18 @@ object Monkey {
     val monkeyIdPattern = "Monkey (\\d+):".r
     val monkeyIdPattern(monkeyId) = monkeyIdRaw
 
-    val startingItems: Seq[Int] = startingRaw.replace("Starting items: ", "").split(", ").toSeq.map(x => Integer.parseInt(x.trim))
+    val startingItems: Seq[Long] = startingRaw.replace("Starting items: ", "").split(", ").toSeq.map(x => Integer.parseInt(x.trim))
 
     //    val operationPattern = "([\\*\\+])\\s(\\d+)$".r
     //    val operationPattern(symbol,opNumString) = operationRaw
     val opsSplit = operationRaw.replace("Operation: new = old ", "").trim().split(" ")
-    val operation: Int => Int = opsSplit(0) match {
-      case "*" => (x: Int) =>
+    val operation: Long => Long = opsSplit(0) match {
+      case "*" => (x: Long) =>
         x * (opsSplit(1) match {
           case "old" => x
           case _ => Integer.parseInt(opsSplit(1))
         })
-      case "+" => (x: Int) =>
+      case "+" => (x: Long) =>
         x + (opsSplit(1) match {
           case "old" => x
           case _ => Integer.parseInt(opsSplit(1))
@@ -103,9 +124,11 @@ object Monkey {
     val numberPattern = """(\d+)""".r
     val modValue = Integer.parseInt(numberPattern.findFirstIn(testRaw).get)
 
+    Monkey.modValue *= modValue
+
     //    val testStripped = testRaw.replace("Test: divisible by ","").trim
     //    val modValue = Integer.parseInt(testStripped)
-    val testOperation: Int => Boolean = (x: Int) => x % modValue == 0
+    val testOperation: Long => Boolean = (x: Long) => x % modValue == 0
 
     //    val numberPattern(trueMonkeyString) = trueRaw
     //    val numberPattern(falseMonkeyString) = falseRaw
