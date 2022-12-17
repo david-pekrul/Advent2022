@@ -44,8 +44,6 @@ object Runner {
 
     allInstructions.foldLeft((knots,tailVisitedCoords))((prevInfo,nextInstruction) => {
       val prevKnots = prevInfo._1
-      val prevVisitedCoords = prevInfo._2
-      val headMove = prevKnots.head.add(nextInstruction.direction)
       val updatedKnots = prevKnots.foldLeft(Seq[Coord]())((acc,next) => {
         if(acc.isEmpty){
           Seq(next.add(nextInstruction.direction))//move the lead knot
