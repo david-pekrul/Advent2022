@@ -32,7 +32,7 @@ object Day12 {
   def flood(currentLocation: LetterHeight, map: Map[(Int, Int), LetterHeight]): Map[(Int, Int), LetterHeight] = {
     val pathSoFar = currentLocation.path
     val neighbors = currentLocation.getNeighborCoords().map(c => map.get(c).get)
-
+    ???
   }
 
   //  def getPaths(start: LetterHeight, end: LetterHeight, map: Map[(Int,Int),LetterHeight]): Seq[Seq[LetterHeight]] = {
