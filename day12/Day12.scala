@@ -19,37 +19,31 @@ object Day12 {
     val E = getEndLocation(letterHeightMap)
     MapStats.setMax(letterHeightMap)
 
-    //    println(letterHeightMap)
-
     val calculated = bfs(S, letterHeightMap)
 
     //    println(calculated)
 
-    printMap(calculated)
+    //    printMap(calculated)
 
     val part1 = calculated.get(E.getCoords()).get.depth
     println(s"Part 1: $part1")
-    //338 too low
-    //470 too high
 
-    val minForLetters = alphabet.map(char => {
-      calculated.values
-        .filter(_.visited())
-        .filter(spot => spot.char == char)
-        .reduce((a,b) => if(a.depth < b.depth) {a} else {b})
-        .printString
-    }).toSeq
-    println(minForLetters)
+    val calculated2 = bfs(
+      E,
+      letterHeightMap,
+      canStepFrom = (a,b) => (b+1 >= a)
+    )
+    val part2 = calculated2.values
+      .filter(x => x.visited() && x.char == 'a')
+      .map(_.depth).min
 
-
+    println(s"Part 2: $part2")
   }
-
-  val alphabet = ('a' to 'z')
 
   def printMap(input: Map[(Int, Int), LetterHeight]): Unit = {
     (0 to MapStats.maxRow).foreach(row => {
       (0 to MapStats.maxCol).foreach(col => {
-        print(input.get(row,col).get.printString + "\t")
+        print(input.get(row, col).get.printString + "\t")
       })
       println
     })
@@ -63,33 +57,34 @@ object Day12 {
     lm.values.find(lh => lh.char == 'E').get
   }
 
-  def bfs(start: LetterHeight, map: Map[(Int, Int), LetterHeight]) = {
+  def bfs(start: LetterHeight, map: Map[(Int, Int), LetterHeight], canStepFrom: (Int, Int) => Boolean = (a, b) => (a + 1 >= b)) = {
 
     @tailrec
     def bfs2(currentMap: Map[(Int, Int), LetterHeight], nextLayer: Set[(Int, Int)], depth: Int = 0): Map[(Int, Int), LetterHeight] = {
+      if (nextLayer.isEmpty) {
+        return currentMap
+      }
+
       val updatedMap = nextLayer.foldLeft(currentMap)((updatedMap, coord) => {
         updatedMap.updated(coord, updatedMap.get(coord).get.visit(depth))
       })
-      val x = nextLayer
-        .map(n => {
+      val neighborCoords = nextLayer
+        .flatMap(n => {
           val here = updatedMap.get(n).get
-          val allNeighbors = here.neighborCoords
-          val validSteps = allNeighbors
+          val validSteps = here.neighborCoords
             .filter(x => {
               val neighborHeight = updatedMap.get(x).get.height
-              (neighborHeight <= (here.height + 1))
+              canStepFrom(here.height, neighborHeight)
+              //              (neighborHeight <= (here.height + 1)) //at most one higher than here
             })
           validSteps
         })
-        .flatten
+      val neighborHeights = neighborCoords
         .map(coord => updatedMap.get(coord).get)
         .filter(!_.visited())
-      val y = x
-        .map(_.getCoords())
-      if (y.isEmpty) {
-        return updatedMap
-      }
-      bfs2(updatedMap, y, depth + 1)
+
+      val filteredNeighborCoords = neighborHeights.map(_.getCoords())
+      bfs2(updatedMap, filteredNeighborCoords, depth + 1)
     }
 
     bfs2(map, Set(start.getCoords()))
@@ -112,23 +107,24 @@ object MapStats {
 case class LetterHeight(char: Char, row: Int, col: Int, depth: Int = -1) {
   lazy val height = {
     char match {
-      case 'E' => 27
-      case 'S' => 0
+      case 'E' => 26
+      case 'S' => 1
       case _ => Helpers.getLetterIndex(char)
     }
   }
 
   def getCoords() = (row, col)
 
-  lazy val neighborCoords: Seq[(Int, Int)] = {
+  def neighborCoords(): Seq[(Int, Int)] = {
 
     Seq(
-      (row - 1, col),
-      (row + 1, col),
-      (row, col - 1),
-      (row, col + 1)
+      (row - 1, col), //down
+      (row + 1, col), //up
+      (row, col - 1), //left
+      (row, col + 1) //right
     )
       .filter { case (nextRow, nextCol) => {
+        //edge checking
         !(nextRow < 0 || nextRow > MapStats.maxRow || nextCol < 0 || nextCol > MapStats.maxCol)
       }
       }
