@@ -6,22 +6,100 @@ import java.io.BufferedReader
 
 object Day13 {
   def main(args: Array[String]): Unit = {
-    val groupedInput = Helpers.readFile("day13/day13.txt").filter(!_.trim.isBlank).grouped(2)
+    val groupedInput = Helpers.readFile("day13/day13.txt").filter(!_.trim.isBlank).sliding(2, 2)
 
     val parsedPacketPairs = groupedInput.map(pair => {
       pair.map(Packet.parse)
     }).toSeq
 
-    println(parsedPacketPairs.mkString("\r\n"))
+    val part1Processed = parsedPacketPairs.zipWithIndex.map { case (pair,index) => {
+      val result = pair(0).comesBefore(pair(1))
+      (index+1,result.get)
+    }}
 
-    //todo: Still need part 1, but it is PARSED!
+    val part1 = part1Processed.filter(_._2).map(_._1).sum
+    println(s"Part 1: $part1")
+
+
+
   }
 }
 
-case class Packet(seq: Seq[Either[Int, Packet]]) {
+case class Packet(packetData: Seq[Either[Int, Packet]]) {
+
+  def comesBefore(other: Packet): Option[Boolean] = {
+
+    /*
+      None => Inconclusive
+      Some(true) => are in order
+      Some(false) => are out of order
+     */
+    def areInOrder(leftElemOpt: Option[Either[Int, Packet]], rightElemOpt: Option[Either[Int, Packet]]): Option[Boolean] = {
+      if (leftElemOpt.isEmpty && rightElemOpt.isEmpty) {
+        return None //inconclusive
+      }
+      if (leftElemOpt.isEmpty) { //&& rightElemOpt.isDefined
+        return Some(true) //left ran of out elements first -> correct order
+      }
+      if (rightElemOpt.isEmpty) {
+        return Some(false) //right ran out of elements first -> incorrect order
+      }
+      //both are not empty
+      (leftElemOpt.get, rightElemOpt.get) match {
+        case (Left(lNum), Left(rNum)) => {
+          if (lNum > rNum) {
+            return Some(false) //
+          }
+          if (lNum == rNum) {
+            return None
+          }
+          return Some(true)
+
+        }
+        case (Right(lPacket), Right(rPacket)) => {
+          return lPacket.comesBefore(rPacket);
+        }
+        case (Right(lPacket), Left(rNum)) => {
+          val rightAsPacket = new Packet(Seq(Left(rNum)))
+          return lPacket.comesBefore(rightAsPacket)
+        }
+        case (Left(lNum), Right(rPacket)) => {
+          val leftAsPacket = new Packet(Seq(Left(lNum)))
+          return leftAsPacket.comesBefore(rPacket)
+        }
+      }
+    }
+
+//    (0 to Math.max(packetData.size, other.packetData.size) - 1).foreach(index => {
+//      val leftOpt = packetData.lift(index)
+//      val rightOpt = other.packetData.lift(index)
+//      val theseInOrder = areInOrder(leftOpt, rightOpt)
+//      theseInOrder match {
+//        case Some(result) => return Some(result)
+//        case None => None
+//      }
+//    })
+
+    val result2 = (0 to Math.max(packetData.size, other.packetData.size) - 1).foldLeft(None: Option[Boolean])((acc, index) => {
+      if (acc.isDefined) {
+        acc
+      } else {
+        val leftOpt = packetData.lift(index)
+        val rightOpt = other.packetData.lift(index)
+        val result = areInOrder(leftOpt, rightOpt)
+        result match {
+          case Some(result) => Some(result)
+          case None => None
+        }
+      }
+    })
+
+    result2
+
+  }
 
   override def toString: String = {
-    val s = seq.map(x => {
+    val s = packetData.map(x => {
       x match {
         case Left(num) => num.toString
         case Right(p) => p.toString
@@ -29,13 +107,7 @@ case class Packet(seq: Seq[Either[Int, Packet]]) {
     }).mkString(",")
     s"P[$s]"
   }
-
 }
-
-/*
-  Packet: '[' + ( + '];
-
- */
 
 object Packet {
   //https://github.com/j-mie6/Parsley //but I don't want to pull in dependencies! That will make this _work_ work.
@@ -76,7 +148,7 @@ object Packet {
             //remove last packet so we can replace it with an updated packet
             val allButLast = acc.reverse.tail.reverse
             val lastPacket = acc.last
-            val updatedLastPacket = Packet(lastPacket.seq :+ Left(num))
+            val updatedLastPacket = Packet(lastPacket.packetData :+ Left(num))
             allButLast :+ updatedLastPacket
           }
           case Right("[") => {
@@ -88,7 +160,7 @@ object Packet {
             val lastPacket = acc.last
             val secondToLast = acc(acc.length - 2)
             val allButLastTwo = acc.slice(0, acc.length - 2)
-            val newLast = Packet(secondToLast.seq :+ Right(lastPacket))
+            val newLast = Packet(secondToLast.packetData :+ Right(lastPacket))
             val acc2 = allButLastTwo :+ newLast
             acc2
           }
@@ -99,7 +171,7 @@ object Packet {
       })
 
       //I don't know why I have to dig into this nesting, but ¯\_(ツ)_/¯
-      val parsedPacket = folded.head.seq(0) match {
+      val parsedPacket = folded.head.packetData(0) match {
         case Left(_) => throw new RuntimeException("WHOA!")
         case Right(x) => x
       }
