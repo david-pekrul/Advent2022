@@ -12,14 +12,27 @@ object Day13 {
       pair.map(Packet.parse)
     }).toSeq
 
-    val part1Processed = parsedPacketPairs.zipWithIndex.map { case (pair,index) => {
+    val part1Processed = parsedPacketPairs.zipWithIndex.map { case (pair, index) => {
       val result = pair(0).comesBefore(pair(1))
-      (index+1,result.get)
-    }}
+      (index + 1, result.get)
+    }
+    }
 
     val part1 = part1Processed.filter(_._2).map(_._1).sum
     println(s"Part 1: $part1")
 
+
+    val dividerPackets = Seq(Packet(Seq(Left(2))), Packet(Seq(Left(6))))
+    val part2Start = parsedPacketPairs.flatten ++ dividerPackets
+
+    val part2Sorted = part2Start.sortWith((a, b) => a.comesBefore(b).get)
+
+    val part2 = part2Sorted.zipWithIndex.filter { case (p, index) => {
+      dividerPackets.contains(p)
+    }
+    }.map(_._2+1).reduce((a,b) => a*b)
+
+    println(s"Part 2: $part2")
 
 
   }
@@ -70,15 +83,15 @@ case class Packet(packetData: Seq[Either[Int, Packet]]) {
       }
     }
 
-//    (0 to Math.max(packetData.size, other.packetData.size) - 1).foreach(index => {
-//      val leftOpt = packetData.lift(index)
-//      val rightOpt = other.packetData.lift(index)
-//      val theseInOrder = areInOrder(leftOpt, rightOpt)
-//      theseInOrder match {
-//        case Some(result) => return Some(result)
-//        case None => None
-//      }
-//    })
+    //    (0 to Math.max(packetData.size, other.packetData.size) - 1).foreach(index => {
+    //      val leftOpt = packetData.lift(index)
+    //      val rightOpt = other.packetData.lift(index)
+    //      val theseInOrder = areInOrder(leftOpt, rightOpt)
+    //      theseInOrder match {
+    //        case Some(result) => return Some(result)
+    //        case None => None
+    //      }
+    //    })
 
     val result2 = (0 to Math.max(packetData.size, other.packetData.size) - 1).foldLeft(None: Option[Boolean])((acc, index) => {
       if (acc.isDefined) {
