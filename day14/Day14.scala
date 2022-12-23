@@ -1,5 +1,6 @@
 package day14
 
+import day14.Cave.fillCave
 import helpers.Helpers
 
 import scala.annotation.tailrec
@@ -14,10 +15,13 @@ object Day14 {
   def main(args: Array[String]): Unit = {
     val rockPaths = Helpers.readFile("day14/day14.txt").toSeq.map(RockPath.parse).flatten
     val caveStart = Cave.build(rockPaths)
-//    caveStart.printCave()
+    //    caveStart.printCave()
 
-    val part1 = Cave.fillCave(caveStart)
-    println(s"Part 1: $part1")
+        val part1 = Cave.fillCave(caveStart)
+        println(s"Part 1: $part1")
+
+    val part2 = fillCave(Cave.build2(rockPaths))
+    println(s"Part 2: $part2")
 
 
   }
@@ -75,7 +79,7 @@ object RockPath {
   }
 }
 
-case class Cave(cave: Map[Coord, Option[Boolean]], abyssDepth: Option[Int] = None) {
+case class Cave(cave: Map[Coord, Option[Boolean]], abyssDepth: Option[Int] = None, floorDepth: Option[Int] = None) {
   /*
       None => Empty
       Some(true) => Rock
@@ -94,6 +98,16 @@ case class Cave(cave: Map[Coord, Option[Boolean]], abyssDepth: Option[Int] = Non
 
   val sandSource = Coord(0, 500)
 
+  def sandRestingAtSource(): Boolean = {
+    val optElement = cave.get(sandSource)
+    if(optElement.isEmpty){
+      return false
+    }
+    if(optElement.get.isEmpty){
+      return false
+    }
+    true
+  }
 
   /**
    * @return Some(cave) if the sand came to a rest, None otherwise
@@ -105,25 +119,34 @@ case class Cave(cave: Map[Coord, Option[Boolean]], abyssDepth: Option[Int] = Non
     def run(currentCave: Cave, sand: Sand): Cave = {
       //Updated Cave + Is Sand at rest?
 
+      if (floorDepth.isDefined && sand.coord.row == floorDepth.get - 1) {
+        return currentCave; //the sand is  resting on the floor
+      }
+
       val newSandLocationOpt = sand.getNextFallCoord(currentCave)
       if (newSandLocationOpt.isEmpty) {
         //the sand is at rest
-        return currentCave
+        if (sandRestingAtSource()) {
+          return Cave.CAVE_AT_MAX_CAPACITY
+        } else {
+          return currentCave
+        }
       }
 
       val newSandLocation = newSandLocationOpt.get
 
-      if (newSandLocation.row >= currentCave.getAbyssDepth) {
+      if (floorDepth.isEmpty && newSandLocation.row >= currentCave.getAbyssDepth) {
         return Cave.CAVE_AT_MAX_CAPACITY
       }
+
 
       val updatedCave = currentCave.cave
         .updated(sand.coord, None) //remove the sand from it's previous spot
         .updated(newSandLocation, Some(false)) //put it in the new spot
-      return run(Cave(updatedCave, Some(getAbyssDepth)), Sand(newSandLocation))
+      return run(Cave(updatedCave, Some(getAbyssDepth), floorDepth), Sand(newSandLocation))
     }
 
-    run(this, Sand(sandSource))
+    run(Cave(cave.updated(sandSource,Some(false)),abyssDepth,floorDepth), Sand(sandSource))
 
   }
 
@@ -197,6 +220,15 @@ object Cave {
     Cave(mappedCoords)
   }
 
+  def build2(rocks: Seq[RockPath]): Cave = {
+    val floorlessCave = build(rocks)
+
+    val floorDepth = floorlessCave.getAbyssDepth + 2
+
+
+    Cave(floorlessCave.cave, None, Some(floorDepth))
+  }
+
   val CAVE_AT_MAX_CAPACITY = Cave(Map.empty)
 
   def fillCave(inputCave: Cave): Int = {
@@ -206,9 +238,9 @@ object Cave {
       if (nextCave == CAVE_AT_MAX_CAPACITY) {
         return count
       }
-//      println(s"So far: $count")
-//      nextCave.printCave()
-//      println("---------------------")
+      //      println(s"So far: $count")
+      //      nextCave.printCave()
+      //      println("---------------------")
       addMoreSand(nextCave, count + 1)
     }
 
