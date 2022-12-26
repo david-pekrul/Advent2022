@@ -11,7 +11,7 @@ object Day15 {
 
     val sensorsAndBeacons = Helpers.readFile(inputs._1).map(parseLine)
 
-    val sensorSet = sensorsAndBeacons.map(_._1).toSet
+    val sensorSet = sensorsAndBeacons.map(_._1)
 
     val part1BeaconlessRanges = getBeaconlessRanges(inputs._2, sensorSet)
     val part1 = getBeaconlessRangeCount(part1BeaconlessRanges)
@@ -19,18 +19,19 @@ object Day15 {
 
     val distressBeaconLocation = inputs._3.to(LazyList)
       .map(yRow => {
-        yRow -> getBeaconlessRanges(yRow, sensorSet , false)
+        //map every row to the ranges which beacons cannot exist
+        yRow -> getBeaconlessRanges(yRow, sensorSet, false)
       })
       .filter(x => {
+        //the location of the distress beacon has to be in a gap in the ranges
         def ranges = x._2
-
         ranges.size == 2 && ranges.head._2 == ranges.last._1 - 2 //this is the gap!
       })
-      .take(1)
+      .take(1) //since the location is unique, force the Seq to just one element
       .map(x => {
         val row = x._1
-        val col = x._2(0)._2 + 1 //the gap location
-        Coord(row, col)
+        val col = x._2(0)._2 + 1
+        Coord(row, col) //the gap location
       })
       .head
 
@@ -40,7 +41,7 @@ object Day15 {
 
     val end = System.currentTimeMillis()
 
-    println(s"\t[time: ${(end-start)/1000.0}s]")
+    println(s"\t[time: ${(end - start) / 1000.0}s]")
 
   }
 
@@ -59,7 +60,7 @@ object Day15 {
     (Sensor(Coord(sY, sX), b), b)
   }
 
-  def getBeaconlessRanges(yRow: Int, sensors: Set[Sensor], filterBeaconLocations: Boolean = true) = {
+  def getBeaconlessRanges(yRow: Int, sensors: Seq[Sensor], filterBeaconLocations: Boolean = true) = {
     val sortedCoveredRanges = sensors.map(_.getYIntersectCols(yRow)).filter(_.isDefined).map(_.get).toSeq.sortBy(_._1)
 
     //head == starter, and foldLeft over the rest
