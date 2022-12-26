@@ -4,38 +4,43 @@ import helpers.Helpers
 
 object Day15 {
   def main(args: Array[String]): Unit = {
-
+    val start = System.currentTimeMillis()
     //    val inputs = ("day15/test.txt", 10, (0 to 20))
     val inputs = ("day15/day15.txt", 2000000, (0 to 4000000))
 
+
     val sensorsAndBeacons = Helpers.readFile(inputs._1).map(parseLine)
 
-    val part1BeaconlessRanges = getBeaconlessRanges(inputs._2, sensorsAndBeacons.map(_._1).toSet)
+    val sensorSet = sensorsAndBeacons.map(_._1).toSet
+
+    val part1BeaconlessRanges = getBeaconlessRanges(inputs._2, sensorSet)
     val part1 = getBeaconlessRangeCount(part1BeaconlessRanges)
     println(s"Part 1: $part1") //5809294
 
-    val distressBeaconLocation = inputs._3
+    val distressBeaconLocation = inputs._3.to(LazyList)
       .map(yRow => {
-        yRow -> getBeaconlessRanges(yRow, sensorsAndBeacons.map(_._1).toSet, false)
+        yRow -> getBeaconlessRanges(yRow, sensorSet , false)
       })
-      .filter(_._2.size == 2)
       .filter(x => {
-        def firstRange = x._2(0)
+        def ranges = x._2
 
-        def secondRange = x._2(1)
-
-        firstRange._2 == secondRange._1 - 2 //this is the gap
+        ranges.size == 2 && ranges.head._2 == ranges.last._1 - 2 //this is the gap!
       })
+      .take(1)
       .map(x => {
         val row = x._1
         val col = x._2(0)._2 + 1 //the gap location
         Coord(row, col)
       })
-      .take(1).head
+      .head
 
     val part2 = (distressBeaconLocation.col.longValue() * 4000000l + distressBeaconLocation.row)
 
     println(s"Part 2: $part2")
+
+    val end = System.currentTimeMillis()
+
+    println(s"\t[time: ${(end-start)/1000.0}s]")
 
   }
 
