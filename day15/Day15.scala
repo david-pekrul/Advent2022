@@ -5,13 +5,38 @@ import helpers.Helpers
 object Day15 {
   def main(args: Array[String]): Unit = {
 
-//    val inputs = ("day15/test.txt",10)
-    val inputs = ("day15/day15.txt",2000000)
+    //    val inputs = ("day15/test.txt", 10, (0 to 20))
+    val inputs = ("day15/day15.txt", 2000000, (0 to 4000000))
 
     val sensorsAndBeacons = Helpers.readFile(inputs._1).map(parseLine)
 
-    val part1 = getLocationsWithoutBeacons(inputs._2,sensorsAndBeacons.map(_._1).toSet).size
-    println(s"Part 1: $part1")
+    val part1BeaconlessRanges = getBeaconlessRanges(inputs._2, sensorsAndBeacons.map(_._1).toSet)
+    val part1 = getBeaconlessRangeCount(part1BeaconlessRanges)
+    println(s"Part 1: $part1") //5809294
+
+    val distressBeaconLocation = inputs._3
+      .map(yRow => {
+        yRow -> getBeaconlessRanges(yRow, sensorsAndBeacons.map(_._1).toSet, false)
+      })
+      .filter(_._2.size == 2)
+      .filter(x => {
+        def firstRange = x._2(0)
+
+        def secondRange = x._2(1)
+
+        firstRange._2 == secondRange._1 - 2 //this is the gap
+      })
+      .map(x => {
+        val row = x._1
+        val col = x._2(0)._2 + 1 //the gap location
+        Coord(row, col)
+      })
+      .take(1).head
+
+    val part2 = (distressBeaconLocation.col.longValue() * 4000000l + distressBeaconLocation.row)
+
+    println(s"Part 2: $part2")
+
   }
 
   def parseLine(line: String): (Sensor, Beacon) = {
@@ -29,17 +54,58 @@ object Day15 {
     (Sensor(Coord(sY, sX), b), b)
   }
 
-  def getLocationsWithoutBeacons(yRow: Int, sensors: Set[Sensor]) = {
-    val coveredRowRanges = sensors.map(_.getYIntersectCols(yRow)).filter(_.isDefined).map(_.get)
-    val corners = getGridCorners(sensors)
-    val xRange = (corners._1.col to corners._2.col)
+  def getBeaconlessRanges(yRow: Int, sensors: Set[Sensor], filterBeaconLocations: Boolean = true) = {
+    val sortedCoveredRanges = sensors.map(_.getYIntersectCols(yRow)).filter(_.isDefined).map(_.get).toSeq.sortBy(_._1)
 
-    val beaconlessLocations = coveredRowRanges.foldLeft(Set[Int]())((acc, next) => {
-      acc ++ (next._1 to next._2)
+    //head == starter, and foldLeft over the rest
+    val sortedRangesWithoutBeacons = sortedCoveredRanges.tail.foldLeft(Seq[(Int, Int)](sortedCoveredRanges.head))((acc, next) => {
+      //determine if next overlaps
+      //since these are sorted by the left/_._1 values, the next range will never start before one we've seen.
+      /*
+          cases to merge
+          last:   |----------------|
+          next1:        |-------|
+          next2:        |-------------|
+              ->  |-------------------|
+          else, there is a gap!
+       */
+      acc.init
+      if (next._1 <= acc.last._2) {
+        //the next range starts within the last range
+        //Seq.init == all but the last element
+        acc.init :+ (acc.last._1, Math.max(acc.last._2, next._2)) //update the last range go from the beginning to the max of either range
+      } else {
+        //there is a gap!
+        acc :+ next
+      }
     })
 
-    //remove the locations that HAVE a Beacon!
-    beaconlessLocations -- sensors.map(_.closestBeacon).filter(_.coord.row == yRow).map(_.coord.row)
+    val beaconLocationsOnRow = if (filterBeaconLocations) {
+      sensors.map(_.closestBeacon).filter(_.coord.row == yRow).map(_.coord.col).toSeq.sorted
+    } else {
+      Seq()
+    }
+
+    val beaconlessRanges = beaconLocationsOnRow.foldLeft(sortedRangesWithoutBeacons)((acc, beaconLocation) => {
+      //see if this beacon location splits a range
+      acc.foldLeft(Seq[(Int, Int)]())((acc2, seq) => {
+        if (seq._1 < beaconLocation && seq._2 > beaconLocation) {
+          //split this seq, omiting the beacon location
+          acc2 ++ Seq((seq._1, beaconLocation - 1), (beaconLocation + 1, seq._2))
+        } else {
+          acc2 :+ seq
+        }
+      })
+    })
+    beaconlessRanges
+  }
+
+  def getBeaconlessRangeCount(beaconlessRanges: Seq[(Int, Int)]): Int = {
+    val result = beaconlessRanges.foldLeft(0)((acc, next) => {
+      acc + (next._2 - next._1) + 1
+    })
+
+    result
   }
 
   def getGridCorners(sensors: Set[Sensor]) = {
@@ -67,10 +133,10 @@ case class Sensor(coord: Coord, closestBeacon: Beacon) {
     val a = -1 * radius + Math.abs(coord.row - yRow) + coord.col;
     val b = radius - Math.abs(coord.row - yRow) + coord.col
 
-    val leftYIntercept = Coord(yRow, Math.min(a, b))
-    val rightYIntercept = Coord(yRow, Math.max(a, b))
+    val leftRowIntercept = Coord(yRow, Math.min(a, b))
 
-    if (coord.taxiDistanceTo(leftYIntercept) > radius) {
+    //Checking to make sure that this coordinate is within the radius of this sensor
+    if (coord.taxiDistanceTo(leftRowIntercept) > radius) {
       None
     } else {
       Some((Math.min(a, b), Math.max(a, b)))
