@@ -11,6 +11,9 @@ object Day16 {
     val (valves, network) = ValveNetwork.parse(rawLines)
     val startingValve = valves.filter(_.id.equals("AA")).head
     val (flowValves, slimNetwork) = ValveNetwork.slimNetwork(valves, network, startingValve)
+    //    println(flowValves.mkString("\r\n"))
+    //    println(slimNetwork.toSeq.mkString("\r\n"))
+
 
     val paths = ValveNetwork.findPaths(30, startingValve, valves, slimNetwork)
     val optimalPath = paths
@@ -30,22 +33,23 @@ object Day16 {
 
     val scoreAndSets = paths2.map(path => (ValveNetwork.calculateScore(path), (path.map(_.id).toSet - "AA")))
       .groupBy(_._2)
-      .map(valveGroup => (valveGroup._1, valveGroup._2.map(_._1).max))
+      .map(valveGroup => (valveGroup._1,valveGroup._2.map(_._1).max))
       .toSeq
 
-    val part2 = scoreAndSets.flatMap(first => {
+    def overlap(a: Set[String], b: Set[String]): Boolean = {
+      a.exists(b.contains(_))
+    }
+
+    val pairs = scoreAndSets.flatMap(first => {
       scoreAndSets.map(second => {
-        if (first._1.exists(second._1.contains(_))) {
+        if(!overlap(first._1,second._1)) {
           Some(first._2 + second._2)
-        } else {
+        } else{
           None
         }
       }).filter(_.isDefined).map(_.get)
-    }).max
-
-    println(s"Part 2: ${part2}")
-    val end = System.currentTimeMillis()
-    println(s"\t[time: ${(end - start) / 1000.0}s]")
+    })
+    println(s"Part 2: ${pairs.max}")
   }
 }
 
@@ -177,6 +181,8 @@ object ValveNetwork {
       1
     }
   }
+
+  case class ValvePath(path: Seq[Valve], minutesRemaining: Int)
 
   def calculateScore(path: Seq[Valve]): Int = {
     path.map(v => {
