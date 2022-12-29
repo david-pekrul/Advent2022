@@ -11,9 +11,6 @@ object Day16 {
     val (valves, network) = ValveNetwork.parse(rawLines)
     val startingValve = valves.filter(_.id.equals("AA")).head
     val (flowValves, slimNetwork) = ValveNetwork.slimNetwork(valves, network, startingValve)
-    //    println(flowValves.mkString("\r\n"))
-    //    println(slimNetwork.toSeq.mkString("\r\n"))
-
 
     val paths = ValveNetwork.findPaths(30, startingValve, valves, slimNetwork)
     val optimalPath = paths
@@ -29,25 +26,24 @@ object Day16 {
     println(s"Part 1 optimal path: ${optimalPath._2}")
     println(s"Part 1: ${optimalPath._1}")
 
-    /*  val optimalPath1Deux = ValveNetwork.findPaths2(30, startingValve, valves, slimNetwork, false)
+    val paths2 = ValveNetwork.findPaths(26, startingValve, valves, slimNetwork).map(_.tail)
 
-      println(s"Part 1 deux optimal path: ${optimalPath1Deux}")
-      println(s"Part 1 deux: ${ValveNetwork.calculateScore(optimalPath1Deux)}")
+    val scoreAndSets = paths2.map(path => (ValveNetwork.calculateScore(path), (path.map(_.id).toSet - "AA")))
+      .groupBy(_._2)
+      .map(valveGroup => (valveGroup._1, valveGroup._2.map(_._1).max))
+      .toSeq
 
-  */
-    val optimalScore1_2 = ValveNetwork.findPaths3(30, startingValve, valves, slimNetwork, multiPath = false)
-    println(s"Part 1_2: ${optimalScore1_2}")
-    println("-----------------------------")
+    val part2 = scoreAndSets.flatMap(first => {
+      scoreAndSets.map(second => {
+        if (first._1.exists(second._1.contains(_))) {
+          Some(first._2 + second._2)
+        } else {
+          None
+        }
+      }).filter(_.isDefined).map(_.get)
+    }).max
 
-
-    //    val optimalPath2 = ValveNetwork.findPaths2(26, startingValve, valves, slimNetwork, true)
-    //
-    //    println(s"Optimal Path 2: ${optimalPath2}")
-    //    println(s"Part 2: ${ValveNetwork.calculateScore(optimalPath2)}")
-
-    val optimalScore3 = ValveNetwork.findPaths3(26, startingValve, valves, slimNetwork, multiPath = true)
-    println(s"Part 2: ${optimalScore3}")
-
+    println(s"Part 2: ${part2}")
     val end = System.currentTimeMillis()
     println(s"\t[time: ${(end - start) / 1000.0}s]")
   }
@@ -174,155 +170,6 @@ object ValveNetwork {
     _step(Seq(startValve), startValve, minutes)
   }
 
-  def findPaths3(minutes: Int, startValve: Valve, allValves: Set[Valve], slimNetwork: Map[String, Map[String, Int]], multiPath: Boolean): Int = {
-    val findStart = System.currentTimeMillis()
-    val allValveDict = allValves.map(x => (x.id -> x)).toMap
-    val pairCostMap = slimNetwork.keys.map(k1 => {
-      val innerMap = slimNetwork.get(k1).get
-      innerMap.map(kv2 => {
-        (k1, kv2._1) -> kv2._2
-      })
-    }).flatten.toMap
-
-    def _step3(scoresSoFar: Int, minutesRemaining: (Int, Int), currentLocation: (String, String), unvisitedValves: Seq[String]): Int = {
-      if (unvisitedValves.isEmpty) {
-        return scoresSoFar
-      }
-
-      unvisitedValves.to(LazyList).map(unvisitedValveId => {
-        val unvisitedValve = allValveDict.get(unvisitedValveId).get
-
-        val leftCostToMove = pairCostMap.get((currentLocation._1, unvisitedValveId)).get
-        val rightCostToMove = pairCostMap.get((currentLocation._2, unvisitedValveId)).get
-
-        val leftMinutesValveOpenFor = minutesRemaining._1 - leftCostToMove - 1
-        val rightMinutesValveOpenFor = minutesRemaining._2 - rightCostToMove - 1
-
-        val updatedUnvisited = unvisitedValves.filterNot(x => x.equals(unvisitedValveId))
-
-        val bestLeftScore = if (leftMinutesValveOpenFor <= 0) {
-          scoresSoFar
-        } else {
-          val leftScore = scoresSoFar + (leftMinutesValveOpenFor) * unvisitedValve.flowRate
-          _step3(leftScore, (leftMinutesValveOpenFor, minutesRemaining._2), (unvisitedValveId, currentLocation._2), updatedUnvisited)
-        }
-
-        val bestRightScore = if (rightMinutesValveOpenFor <= 0 || multiPath == false) { //multipath = false => don't add anything to the right side
-          scoresSoFar
-        } else {
-          val rightScore = scoresSoFar + (rightMinutesValveOpenFor) * unvisitedValve.flowRate
-          _step3(rightScore, (minutesRemaining._1, rightMinutesValveOpenFor), (currentLocation._1, unvisitedValveId), updatedUnvisited)
-        }
-
-        //If we added this valve next, the best we can do is given by the max of either path
-        Math.max(bestLeftScore, bestRightScore)
-      }).reduce(Math.max)
-    }
-
-    val result = _step3(0, (minutes, minutes), (startValve.id, startValve.id), slimNetwork.keys.filterNot(_.equals("AA")).toSeq)
-
-    val findEnd = System.currentTimeMillis()
-    println(s"\t[findTime: ${(findEnd - findStart) / 1000.0}s]")
-    result
-  }
-
-  def findPaths2(minutes: Int, startValve: Valve, allValves: Set[Valve], slimNetwork: Map[String, Map[String, Int]], multiPath: Boolean): (Seq[Valve], Seq[Valve]) = {
-    val allValveDict = allValves.map(x => (x.id -> x)).toMap
-    val slimKeys = slimNetwork.keys.toSet
-
-    /*Recursive */
-    def _step2(pathsSoFar: (ValvePath, ValvePath), visitedValveIds: Set[String]): (Seq[Valve], Seq[Valve]) = {
-
-      val unvisitedValves = slimKeys.diff(visitedValveIds)
-
-      if (unvisitedValves.isEmpty) {
-        Counter.increaseC1()
-        return (pathsSoFar._1.path, pathsSoFar._2.path)
-      }
-
-      def addValveToPath(unvisitedValve: Valve, vp: ValvePath) = {
-        def valveOpenTime = travelCost(vp.path.last, unvisitedValve) + timeToOpenValve(unvisitedValve)
-
-        if (vp.minutesRemaining - valveOpenTime <= 0) {
-          None
-        } else {
-          Some(ValvePath(vp.path :+ unvisitedValve.setOpenTime(vp.minutesRemaining - valveOpenTime), vp.minutesRemaining - valveOpenTime))
-        }
-      }
-
-      def createPathPairs(unvisitedValve: Valve) = {
-        def leftGoesToValve = (
-          addValveToPath(unvisitedValve, pathsSoFar._1),
-          Some(pathsSoFar._2)
-        )
-
-        def rightGoesToValve = (
-          Some(pathsSoFar._1),
-          addValveToPath(unvisitedValve, pathsSoFar._2),
-        )
-
-        val nextPaths = if (multiPath) {
-          Set((leftGoesToValve, visitedValveIds + unvisitedValve.id), (rightGoesToValve, visitedValveIds + unvisitedValve.id))
-        } else {
-          Set((leftGoesToValve, visitedValveIds + unvisitedValve.id))
-        }
-
-        val result = nextPaths
-          .filter(x => {
-            x._1._1.isDefined && x._1._2.isDefined
-          })
-          .map(x => {
-            ((x._1._1.get, x._1._2.get), x._2)
-          })
-
-        result
-      }
-
-      val updatedPaths = unvisitedValves.toSeq.map(unvisitedValveId => {
-        def unvisitedValve = allValveDict.get(unvisitedValveId).get
-
-        createPathPairs(unvisitedValve)
-      }).flatten
-
-      if (updatedPaths.isEmpty) {
-        //no way to add another valve in the given remaining time
-        Counter.increaseC1()
-        return (pathsSoFar._1.path, pathsSoFar._2.path)
-      }
-
-      val optimalPath = updatedPaths.foldLeft((Int.MinValue, (Seq[Valve](), Seq[Valve]())))((acc, next) => {
-        val furtherOptimalPath = _step2(next._1, next._2)
-        val score = calculateScore(furtherOptimalPath)
-        if (score > acc._1) {
-          (score, furtherOptimalPath)
-        } else {
-          acc
-        }
-      })
-
-      if (optimalPath._1 == Int.MinValue) {
-        println("bummer")
-      }
-
-      optimalPath._2
-    } //end _step
-
-    def travelCost(source: Valve, target: Valve): Int = {
-      val sourceMapOpt = slimNetwork.get(source.id)
-      if (sourceMapOpt.isEmpty) {
-        throw new RuntimeException("unknown source")
-      }
-      val costOpt = sourceMapOpt.get.get(target.id)
-      if (costOpt.isEmpty) {
-        throw new RuntimeException("unknown target")
-      }
-      costOpt.get
-    }
-
-    val startingPaths = (ValvePath(Seq(startValve), minutes), ValvePath(Seq(startValve), minutes))
-    _step2(startingPaths, Set(startValve.id))
-  }
-
   def timeToOpenValve(v: Valve): Int = {
     if (v.flowRate == 0) {
       0
@@ -331,27 +178,9 @@ object ValveNetwork {
     }
   }
 
-  case class ValvePath(path: Seq[Valve], minutesRemaining: Int)
-
   def calculateScore(path: Seq[Valve]): Int = {
     path.map(v => {
       v.flowRate * v.openedMinute
     }).sum
-  }
-
-  def calculateScore(paths: (Seq[Valve], Seq[Valve])): Int = {
-    calculateScore(paths._1) + calculateScore(paths._2)
-  }
-
-}
-
-object Counter {
-  var c1 = 0
-
-  def increaseC1(): Unit = {
-    c1 += 1
-    if (c1 % 100000 == 0) {
-      println(s"C1 $c1")
-    }
   }
 }

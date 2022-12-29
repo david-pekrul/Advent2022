@@ -40,7 +40,6 @@ object Day15 {
     println(s"Part 2: $part2")
 
     val end = System.currentTimeMillis()
-
     println(s"\t[time: ${(end - start) / 1000.0}s]")
 
   }
