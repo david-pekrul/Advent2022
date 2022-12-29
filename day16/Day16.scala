@@ -29,7 +29,7 @@ object Day16 {
     println(s"Part 1 optimal path: ${optimalPath._2}")
     println(s"Part 1: ${optimalPath._1}")
 
-    val paths2 = ValveNetwork.findPaths(26, startingValve, valves, slimNetwork).map(_.tail)
+    val paths2 = ValveNetwork.findPaths(26, startingValve, valves, slimNetwork)
 
     val scoreAndSets = paths2.map(path => (ValveNetwork.calculateScore(path), (path.map(_.id).toSet - "AA")))
       .groupBy(_._2)
