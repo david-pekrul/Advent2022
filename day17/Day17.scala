@@ -7,12 +7,12 @@ object Day17 {
   def main(args: Array[String]): Unit = {
 
     val rawChars = Helpers.readFile("day17/day17.txt").head.toCharArray.toSeq
-    val jets = infiniteStream(rawChars.map(Jet(_))).iterator
+    val jetsIterator = infiniteStream(rawChars.map(Jet(_))).iterator
 
     val rocksIterator = infiniteStream(ROCKS).iterator
 
     val NUM_ROCKS = 2022
-    val endRockPile = run(rocksIterator, jets, NUM_ROCKS)
+    val endRockPile = run(rocksIterator, jetsIterator, NUM_ROCKS)
 
     printRocks(endRockPile)
 
@@ -20,6 +20,7 @@ object Day17 {
 
     println(s"Part 1: $part1")
     //3254 too high
+    //3248 too high
   }
 
   def printRocks(rockPile: Seq[Rock]): Unit = {
@@ -153,7 +154,8 @@ case class Rock(bits: Seq[Coord], xShift: Int, yShift: Long) {
   def pushDown(existingRocks: Seq[Rock]): (Rock, Boolean) = {
     val possibleRock = pushY()
 
-    val collisionChecks = existingRocks.take(20) //get enough rocks so that I'm confident this one didn't sneak past any
+    val collisionChecks = existingRocks.take(100) //get enough rocks so that I'm confident this one didn't sneak past any
+
     for (restingRock <- collisionChecks) {
       if (possibleRock.collides(restingRock)) {
         //        println("Push Down: REST")
@@ -184,7 +186,7 @@ case class Rock(bits: Seq[Coord], xShift: Int, yShift: Long) {
       }
     }
 
-    def otherRockSubset = otherRocks.take(8) //take enough to not fall past one
+    def otherRockSubset = otherRocks.take(100) //take enough to not fall past one
 
     if (shiftedRock.collides(otherRockSubset)) {
       //      println(s"Pushed X: $deltaX : other rock")
