@@ -2,25 +2,50 @@ package day17
 
 import day17.Rocks.{AT_REST, FALLING, ROCKS}
 import helpers.Helpers
+import helpers.Helpers.{infiniteIndexedStream, infiniteStream}
+
+import scala.collection.mutable
 
 object Day17 {
   def main(args: Array[String]): Unit = {
 
     val rawChars = Helpers.readFile("day17/day17.txt").head.toCharArray.toSeq
-    val jetsIterator = infiniteStream(rawChars.map(Jet(_))).iterator
 
-    val rocksIterator = infiniteStream(ROCKS).iterator
+    def jetsIterator = infiniteStream(rawChars.map(Jet(_))).iterator
+
+    def rocksIterator = infiniteStream(ROCKS).iterator
+
+    def jetsIndexedIterator = infiniteIndexedStream(rawChars.map(Jet(_))).iterator
+
+    def rocksIndexedIterator = infiniteIndexedStream(ROCKS).iterator
 
     val NUM_ROCKS = 2022
     val endRockPile = run(rocksIterator, jetsIterator, NUM_ROCKS)
-
-    printRocks(endRockPile)
-
     val part1 = getHeight(endRockPile)
-
     println(s"Part 1: $part1")
-    //3254 too high
-    //3248 too high
+    //    printRocks(endRockPile)
+
+    val part2Limit = 1000000000000L
+    val (cycleStart, cycleEnd, rowInfo) = findCycleSize(rocksIndexedIterator, jetsIndexedIterator)
+
+    val cycleHeight = cycleStart.height - cycleEnd.height
+    val cycleRounds = cycleStart.round - cycleEnd.round
+    val numberOfCycles = (part2Limit - cycleEnd.round) / cycleRounds
+    val remainingRounds = (part2Limit - cycleEnd.round) % cycleRounds
+    val remainingHeight = rowInfo(cycleEnd.round + remainingRounds) - cycleEnd.height
+
+    // |----initial rounds----|~~ cycle1 ~~|~~ cycle2 ~~|~~ cycle3 ~~| -- remaining rounds (if there are any)
+    val part2 = (rowInfo(cycleEnd.round)-1) + //don't count the top row of the initial twice, as it is also the last row in the cycle
+      (numberOfCycles * cycleHeight) +        //add up the heights of all of the full-height cycles
+      remainingHeight                         //add up the remaining height from a partial cycle
+
+    println(s"Part 2: $part2")
+  }
+
+  def convertRockPileToCoordSet(rockPile: Seq[Rock]): Set[Coord] = {
+    rockPile.foldLeft(Set[Coord]())((acc, rock) => {
+      acc ++ rock.getPrintCoords()
+    })
   }
 
   def printRocks(rockPile: Seq[Rock]): Unit = {
@@ -29,12 +54,8 @@ object Day17 {
       (Math.min(acc._1, next.veryBottom), Math.max(acc._2, next.veryTop))
     })
 
-    val printCoords = rockPile.foldLeft(Set[Coord]())((acc, rock) => {
-      acc ++ rock.getPrintCoords()
-    })
-
+    val printCoords = convertRockPileToCoordSet(rockPile)
     println()
-
     (upBound to lowBound by -1).foreach(row => {
       print('|')
       (0 to 6).foreach(col => {
@@ -56,14 +77,124 @@ object Day17 {
       val startHeight = getNextStartHeight(rockPile)
       val currentRock = currentRockRaw.appear(startHeight)
       val updatedPile = fallRock(rockPile, jets, currentRock)
-      //      printRocks(updatedPile)
+//      printRocks(updatedPile)
       updatedPile
     })
   }
 
+  case class RockIdxJetIdx(rockIdx: Int, jetIndex: Int)
+
+  case class RoundAndHeight(round: Long, height: Long)
+
+  case class Accumulator(
+                          rockPile: Seq[Rock],
+                          rockRows: mutable.Map[Long, Int],
+                          stateTracker: mutable.Map[RockIdxJetIdx, mutable.Seq[RoundAndHeight]],
+                          maxHeight: Long,
+                          round: Long)
+
+  def findCycleSize(rocks: Iterator[(Rock, Int)], jets: Iterator[(Jet, Int)]): (RoundAndHeight,RoundAndHeight,Map[Long, Long]) = {
+
+    //find out how long a cycle is
+    rocks.foldLeft(Accumulator(Seq(), mutable.Map(), mutable.Map(), 0L, 0L))((acc, currentRockWithIndex) => {
+      val startHeight = getNextStartHeight(acc.rockPile.toSeq)
+      val currentRock = currentRockWithIndex._1.appear(startHeight)
+      val (updatedPile, jetIdx) = fallRock2(acc.rockPile.toSeq, jets, currentRock)
+
+      val rockIdx = currentRockWithIndex._2
+
+      val mapKey = RockIdxJetIdx(rockIdx, jetIdx)
+      val restingRock = updatedPile.head
+      val newRestingRockCoords = restingRock.getPrintCoords()
+      newRestingRockCoords.foreach(coord => {
+        acc.rockRows.update(coord.row, acc.rockRows.getOrElse(coord.row, 0) + columnToBitShift(coord.col))
+      })
+
+      val currentRoundAndHeight = RoundAndHeight(acc.round, Math.max(restingRock.veryTop,acc.maxHeight)) //the new rock might be resting below the top of previous rocks
+
+      acc.stateTracker.get(mapKey) match {
+        case None => {
+          //this Rock+Jet hasn't been seen before, so add it to the map
+          acc.stateTracker.update(mapKey, mutable.Seq(currentRoundAndHeight))
+        }
+        case Some(previousRoundsAndHeights) => {
+          if (!previousRoundsAndHeights.isEmpty) {
+            compareStates(currentRoundAndHeight, previousRoundsAndHeights, acc.rockRows) match {
+              case None => {
+                acc.stateTracker.update(mapKey, previousRoundsAndHeights.appended(currentRoundAndHeight))
+              }
+              case Some(cycleEnds) => {
+                /* WE FOUND A CYCLE!*/
+                // printRocks(acc.rockPile)
+                val (cycleStart, cycleEnd) = cycleEnds
+                val allRounds = acc.stateTracker.values.flatten.map(e => e.round -> e.height).toMap
+                return (cycleStart, cycleEnd, allRounds)
+              }
+            }
+          }
+        }
+      }
+
+      Accumulator(
+        rockPile = updatedPile,
+        rockRows = acc.rockRows,
+        stateTracker = acc.stateTracker,
+        Math.max(restingRock.veryTop,acc.maxHeight),
+        round = acc.round + 1L
+      )
+    })
+
+    ??? //this only happens when we run out of elements, which it shouldn't.
+  }
+
+  def columnToBitShift(col: Int): Int = {
+    Math.pow(2, col).intValue()
+  }
+
+  def compareStates(top: RoundAndHeight, previous: mutable.Seq[RoundAndHeight], rockRows: mutable.Map[Long, Int]): Option[(RoundAndHeight, RoundAndHeight)] = {
+    previous.reverse.foreach(prev => {
+      if (compareStates(top, prev, rockRows)) {
+        return Some(top, prev)
+      }
+    })
+    None
+  }
+
+
+  def compareStates(top: RoundAndHeight, bottom: RoundAndHeight, rockRows: mutable.Map[Long, Int]): Boolean = {
+    val heightDifference = top.height - bottom.height
+
+    if(heightDifference > bottom.height){
+      return false //the bottom one isn't tall enough to compare to the top ones
+    }
+
+    (heightDifference to 0 by -1).foreach(deltaY => {
+      if (rockRows.get(top.height - deltaY) != rockRows.get(bottom.height - deltaY)) {
+        return false
+      }
+    })
+
+    true //there were no differences
+  }
+
+  def findCycle(pile: Seq[Rock], map: mutable.Map[Int, Seq[Coord]]) = {
+
+    def topRock = pile.head
+
+    def topRockLocations = map.get(topRock.id).get
+
+    //grouped by col
+    //column => rows
+    val sortedColGroupings = topRockLocations.groupBy(_.col).map(colGroup => (colGroup._1, colGroup._2.map(_.row).sorted))
+
+    println("Cycle ?")
+  }
+
+
   def getNextStartHeight(rockPile: Seq[Rock]): Long = {
     getHeight(rockPile) + 4
   }
+
   def getHeight(rockPile: Seq[Rock]): Long = {
     rockPile.take(10).map(_.veryTop).foldLeft(0L)((acc, next) => {
       Math.max(acc, next)
@@ -74,13 +205,13 @@ object Day17 {
   def fallRock(rockPile: Seq[Rock], jets: Iterator[Jet], fallingRockStart: Rock): Seq[Rock] = {
     jets.foldLeft(fallingRockStart)((previousRock, nextJet) => {
       //      printRocks(previousRock +: rockPile)
-      val currentRock = nextJet.apply(previousRock, rockPile)
+      val currentRock = nextJet.apply(previousRock, rockPile)._1
       //      printRocks(currentRock +: rockPile)
       currentRock.pushDown(rockPile) match {
         case (r, AT_REST) => {
           //          printRocks(r +: rockPile)
           //          print("~~~~REST~~~")
-          return r +: rockPile //return out of the whole function
+          return (r +: rockPile) //return out of the whole function
         }
         case (r, FALLING) => {
           r
@@ -90,13 +221,28 @@ object Day17 {
     throw new Exception("Ran out of jets???")
   }
 
-  def infiniteStream[A](seed: Seq[A]): LazyList[A] = {
-    val x = seed.to(LazyList)
-
-    def xs: LazyList[A] = x #::: infiniteStream(seed)
-
-    xs
+  def fallRock2(rockPile: Seq[Rock], jets: Iterator[(Jet, Int)], fallingRockStart: Rock): (Seq[Rock], Int) = {
+    jets.foldLeft((fallingRockStart, Seq[Char]()))((previousRock, nextJet) => {
+      //      printRocks(previousRock +: rockPile)
+      val currentRock = nextJet._1.apply(previousRock._1, rockPile)
+      //      printRocks(currentRock +: rockPile)
+      currentRock._1.pushDown(rockPile) match {
+        case (r, AT_REST) => {
+          //          printRocks(r +: rockPile)
+          //          print("~~~~REST~~~")
+          //  return the updated rock pile and the index of the sequence index of the last jet
+          return (r +: rockPile, nextJet._2) //return out of the whole function
+        }
+        case (r, FALLING) => {
+          (r, previousRock._2 :+ currentRock._2)
+        }
+      }
+    })
+    throw new Exception("Ran out of jets???")
   }
+
+
+
 }
 
 case class Coord(row: Long, col: Int) {}
@@ -106,17 +252,17 @@ case class Jet(symbol: Char) {
     symbol match {
       case '>' => {
         //        println("push Right")
-        input.pushRight(otherRocks)
+        (input.pushRight(otherRocks), symbol)
       }
       case '<' => {
         //        println("push Left")
-        input.pushLeft(otherRocks)
+        (input.pushLeft(otherRocks), symbol)
       }
     }
   }
 }
 
-case class Rock(bits: Seq[Coord], xShift: Int, yShift: Long) {
+case class Rock(id: Short, bits: Seq[Coord], xShift: Int, yShift: Long) {
 
   //used for very quick bounds checking
   lazy val veryTop: Long = {
@@ -135,7 +281,7 @@ case class Rock(bits: Seq[Coord], xShift: Int, yShift: Long) {
   lazy val height = veryTop - veryBottom
 
   def appear(appearY: Long): Rock = {
-    Rock(bits, xShift, appearY)
+    Rock(id, bits, xShift, appearY)
   }
 
   def pushLeft(existingRocks: Seq[Rock]): Rock = {
@@ -182,7 +328,7 @@ case class Rock(bits: Seq[Coord], xShift: Int, yShift: Long) {
         return this
       }
       case false => {
-        Rock(bits, newXShift, yShift)
+        Rock(id, bits, newXShift, yShift)
       }
     }
 
@@ -198,7 +344,7 @@ case class Rock(bits: Seq[Coord], xShift: Int, yShift: Long) {
   }
 
   private def pushY(): Rock = {
-    Rock(bits, xShift, yShift - 1)
+    Rock(id, bits, xShift, yShift - 1)
   }
 
   private def collides(otherRocks: Seq[Rock]): Boolean = {
@@ -253,10 +399,10 @@ object Rocks {
   )
 
   val ROCKS = Seq(
-    Rock(R1, 2, 0),
-    Rock(R2, 2, 0),
-    Rock(R3, 2, 0),
-    Rock(R4, 2, 0),
-    Rock(R5, 2, 0)
+    Rock(1, R1, 2, 0),
+    Rock(2, R2, 2, 0),
+    Rock(3, R3, 2, 0),
+    Rock(4, R4, 2, 0),
+    Rock(5, R5, 2, 0)
   )
 }

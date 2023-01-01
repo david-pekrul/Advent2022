@@ -15,4 +15,20 @@ object Helpers {
       intValue - 38
     }
   }
+
+  def infiniteStream[A](seed: Seq[A]): LazyList[A] = {
+    val x = seed.to(LazyList)
+
+    def xs: LazyList[A] = x #::: infiniteStream(seed)
+
+    xs
+  }
+
+  def infiniteIndexedStream[A](seed: Seq[A]): LazyList[(A, Int)] = {
+    val indexed = seed.zipWithIndex.to(LazyList)
+
+    def xs: LazyList[(A, Int)] = indexed #::: infiniteIndexedStream(seed)
+
+    xs
+  }
 }
