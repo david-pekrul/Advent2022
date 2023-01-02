@@ -23,17 +23,12 @@ object Day18 {
       maxZ = rawInput.map(_._3).max + 1
     )
 
-    val filledOutVoxels = boundingBox.xRange().foldLeft(Map[Coord, VoxelType]())((xAcc, x) => {
-      xAcc ++ boundingBox.yRange().foldLeft(xAcc)((yAcc, y) => {
-        yAcc ++ boundingBox.zRange().foldLeft(yAcc)((zAcc, z) => {
-          val c = Coord(x, y, z)
-          zAcc.updated(c, rockVoxels.getOrElse(c, VoxelType.Air))
-        })
-      })
-    })
+    val filledOutVoxels = Map[Coord, VoxelType]().withDefault(_ => VoxelType.Air) ++ rockVoxels
 
     val part1 = getSurfaceArea(filledOutVoxels, boundingBox)
     println(s"Part 1: $part1")
+    val part2 = getSurfaceArea2(filledOutVoxels, boundingBox)
+    println(s"Part 2: $part2")
   }
 
 
@@ -47,7 +42,7 @@ object Day18 {
   }
 
   def getSurfaceArea(allVoxels: Map[Coord, VoxelType], boundingBox: BoundingBox): Int = {
-    allVoxels.filter(_._2 == VoxelType.Rock).map(_._1).foldLeft(0)((surfaceAreaAcc,rockCoord) => {
+    allVoxels.filter(_._2 == VoxelType.Rock).map(_._1).foldLeft(0)((surfaceAreaAcc, rockCoord) => {
       val neighborTypesMap = rockCoord.getNeighbors(boundingBox).map(n => {
         n -> allVoxels(n)
       })
@@ -55,15 +50,48 @@ object Day18 {
       surfaceAreaAcc + addedSurfaceArea.size
     })
   }
+
+  def getSurfaceArea2(allVoxels: Map[Coord, VoxelType], boundingBox: BoundingBox): Int = {
+
+    val outsideAir = getOutsideAirCoords(allVoxels, boundingBox)
+
+    allVoxels.filter(_._2 == VoxelType.Rock).map(_._1).foldLeft(0)((surfaceAreaAcc, rockCoord) => {
+      val neighborTypesMap = rockCoord.getNeighbors(boundingBox).map(n => {
+        n -> allVoxels(n)
+      })
+      val addedSurfaceArea = neighborTypesMap.filter(n => {
+        outsideAir.contains(n._1)
+      })
+      surfaceAreaAcc + addedSurfaceArea.size
+    })
+  }
+
+  def getOutsideAirCoords(allVoxels: Map[Coord, VoxelType], boundingBox: BoundingBox): Set[Coord] = {
+
+    val startingCoord = Coord(boundingBox.minX, boundingBox.minY, boundingBox.minZ)
+
+    def _bfs(currentLayer: Set[Coord], outsideAirCoords: Set[Coord]): Set[Coord] = {
+      if (currentLayer.isEmpty) {
+        return outsideAirCoords
+      }
+
+      val updatedOutsideAirCoords: Set[Coord] = outsideAirCoords ++ currentLayer
+
+      val nextLayer = currentLayer.flatMap(outsideAirCoord => {
+        outsideAirCoord.getNeighbors(boundingBox).filter(c => allVoxels(c) == VoxelType.Air)
+      }).filter(n => {
+        !outsideAirCoords.contains(n)
+      })
+
+      _bfs(nextLayer, updatedOutsideAirCoords)
+
+    }
+
+    _bfs(Set(startingCoord), Set())
+  }
 }
 
 case class BoundingBox(minX: Int, maxX: Int, minY: Int, maxY: Int, minZ: Int, maxZ: Int) {
-  def xRange() = (minX to maxX)
-
-  def yRange() = (minY to maxY)
-
-  def zRange() = (minZ to maxZ)
-
   def contains(c: Coord): Boolean = {
     minX <= c.x && c.x <= maxX && minY <= c.y && c.y <= maxY && minZ <= c.z && c.z <= maxZ
   }
