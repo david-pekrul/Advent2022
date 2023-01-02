@@ -8,7 +8,7 @@ object Day19 {
 
 
     val processed = startingStates.headOption.map(s => {
-      s._1 -> run(s._1,s._2,s._3)
+      s._1 -> run(s._1, s._2, s._3)
     })
 
     println(processed)
@@ -38,6 +38,8 @@ object Day19 {
         nextStates
       }).flatten
 
+      //filter the nextStates to figure out which ones can't even produce the same number of Geodes as others in the set
+
       _bfs(minute + 1, nextStates)
     }
 
@@ -54,44 +56,47 @@ object Day19 {
     def buildOreRobotFunc(r: Resources) = {
       //max how many can be built?
       //if we can make 2 now, it means we chose not to make 1 earlier and let resources go idle, which is bad
+      //^^ Incorrect! After a few minutes, we can gather enough resources in one minute to make multiples!
       val maxToMake = r.ore / oreRobotCotsOre
-      if (maxToMake >= 1) {
-        Seq((RobotArmy.empty, r), (RobotArmy.newOreRobot, r.use(useOre = oreRobotCotsOre)))
-      } else {
-        Seq((RobotArmy.empty, r))
-      }
+      (0 to maxToMake).map(quantity => {
+        (RobotArmy.newOreRobot.scale(quantity), r.use(useOre = quantity * oreRobotCotsOre))
+      })
     }
 
     def buildClayRobotFunc(r: Resources) = {
       //max how many can be built?
       //if we can make 2 now, it means we chose not to make 1 earlier and let resources go idle, which is bad
+      //^^ Incorrect! After a few minutes, we can gather enough resources in one minute to make multiples!
       val maxToMake = r.ore / clayRobotCostOre
-      if (maxToMake >= 1) {
-        Seq((RobotArmy.empty, r), (RobotArmy.newClayRobot, r.use(useOre = clayRobotCostOre)))
-      } else {
-        Seq((RobotArmy.empty, r))
-      }
+      (0 to maxToMake).map(quantity => {
+        (RobotArmy.newClayRobot.scale(quantity), r.use(useOre = quantity * clayRobotCostOre))
+      })
     }
 
     def buildObsidianRobotFunc(r: Resources) = {
       //max how many can be built?
       //if we can make 2 now, it means we chose not to make 1 earlier and let resources go idle, which is bad
+      //^^ Incorrect! After a few minutes, we can gather enough resources in one minute to make multiples!
       val maxToMake = Math.min(r.ore / obsidianRobotCostOre, r.clay / obsidianRobotCostClay)
-      if (maxToMake >= 1) {
-        Seq((RobotArmy.empty, r), (RobotArmy.newObsidianRobot, r.use(useOre = oreRobotCotsOre)))
-      } else {
-        Seq((RobotArmy.empty, r))
-      }
+      (0 to maxToMake).map(quantity => {
+        (RobotArmy.newObsidianRobot.scale(quantity), r.use(useOre = quantity * obsidianRobotCostOre, useClay = quantity * obsidianRobotCostClay))
+      })
     }
 
     def buildGeodeRobotFunc(r: Resources) = {
       //max how many can be built?
       //if we can make 2 now, it means we chose not to make 1 earlier and let resources go idle, which is bad
+      //^^ Incorrect! After a few minutes, we can gather enough resources in one minute to make multiples!
       val maxToMake = Math.min(r.ore / geodeRobotCostOre, r.obsidian / geodeRobotCostObsidian)
-      if (maxToMake >= 1) {
-        Seq((RobotArmy.empty, r), (RobotArmy.newGeodeRobot, r.use(useOre = oreRobotCotsOre)))
+      if (maxToMake == 0) {
+        Seq() //never pass on an opportunity to build one of these
       } else {
-        Seq() //if we CAN build a Geode robot, we don't pass this opportunity
+        if(maxToMake > 1){
+          println(s"MaxToMake Geode: $maxToMake")
+        }
+        (1 to maxToMake).map(quantity => {
+          (RobotArmy.newObsidianRobot.scale(quantity), r.use(useOre = quantity * geodeRobotCostOre, useClay = quantity * geodeRobotCostObsidian))
+        })
       }
     }
 
@@ -120,6 +125,10 @@ case class RobotArmy(oreRobots: Int, clayRobots: Int, obsidianRobots: Int, geode
 
   def combine(other: RobotArmy): RobotArmy = {
     RobotArmy(oreRobots + other.oreRobots, clayRobots + other.clayRobots, obsidianRobots + other.obsidianRobots, geodeRobots + other.geodeRobots)
+  }
+
+  def scale(scaler: Int) = {
+    RobotArmy(oreRobots * scaler, clayRobots * scaler, obsidianRobots * scaler, geodeRobots * scaler)
   }
 }
 
