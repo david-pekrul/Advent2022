@@ -1,28 +1,32 @@
-package day19
+package day19old
 
 import helpers.Helpers
 
 import scala.collection.mutable
 
-object Day19 {
+object Day19_Old {
   def main(args: Array[String]): Unit = {
     val startingStates = Helpers.readFile("day19/day19.txt").map(parse)
 
+
+    //    val processed = startingStates.headOption.map(s => {
+    //      s._1 -> run(s._1, s._2, s._3, s._4)
+    //    })
     val processed = startingStates.map(s => {
-      s._1 -> runDFS(s._1, s._2, s._3, s._4)
+      s._1 -> runDFS(s._1, s._2, s._3, s._4, s._5)
     })
 
     val part1 = processed.map(x => x._1 * x._2).sum
     println(s"Part 1: $part1")
 
     val part2 = startingStates.take(3).map(s => {
-      runDFS(s._1, s._2, s._3, s._4, minuteLimit = 32)
+      runDFS(s._1, s._2, s._3, s._4, s._5, minuteLimit = 32)
     }).reduce(_ * _)
 
     println(s"Part 2: $part2")
   }
 
-  def runDFS(id: Int, startingState: RobotArmyState, thresholds: RobotThresholds, robotCosts: Seq[RobotCost], minuteLimit: Int = 24) = {
+  def runDFS(id: Int, startingState: RobotArmyState, factory: RobotFactory, thresholds: RobotThresholds, robotCosts: Seq[RobotCost], minuteLimit: Int = 24) = {
 
     var currentMax = 0
 
@@ -53,7 +57,7 @@ object Day19 {
 
 
       val newlyGatheredResources = currentState.robotArmy.gatherResources()
-      val nextRobotBuildOptionsAndMinutes = RobotFactory.getBuildOptions2(currentState, robotCosts)
+      val nextRobotBuildOptionsAndMinutes = factory.getBuildOptions2(currentState, robotCosts)
       val gatheredValues = nextRobotBuildOptionsAndMinutes.map { case (nextRobotCost, minutesTaken) => {
 
         if (minutesTaken >= (minuteLimit - minute)) {
@@ -95,6 +99,47 @@ object Day19 {
     val obsidianRobotThreshold: Int = geodeRobotCostObsidian
     val thresholds = RobotThresholds(oreRobotThreshold, clayRobotThreshold, obsidianRobotThreshold)
 
+    def buildOreRobotFunc(r: Resources) = {
+      //max how many can be built?
+      //if we can make 2 now, it means we chose not to make 1 earlier and let resources go idle, which is bad
+      //^^ Incorrect! After a few minutes, we can gather enough resources in one minute to make multiples!
+      val maxToMake = r.ore / oreRobotCostOre
+      (0 to maxToMake).map(quantity => {
+        (RobotArmy.newOreRobot.scale(quantity), r.use(useOre = quantity * oreRobotCostOre))
+      })
+    }
+
+    def buildClayRobotFunc(r: Resources) = {
+      //max how many can be built?
+      //if we can make 2 now, it means we chose not to make 1 earlier and let resources go idle, which is bad
+      //^^ Incorrect! After a few minutes, we can gather enough resources in one minute to make multiples!
+      val maxToMake = r.ore / clayRobotCostOre
+      (0 to maxToMake).map(quantity => {
+        (RobotArmy.newClayRobot.scale(quantity), r.use(useOre = quantity * clayRobotCostOre))
+      })
+    }
+
+    def buildObsidianRobotFunc(r: Resources) = {
+      //max how many can be built?
+      //if we can make 2 now, it means we chose not to make 1 earlier and let resources go idle, which is bad
+      //^^ Incorrect! After a few minutes, we can gather enough resources in one minute to make multiples!
+      val maxToMake = Math.min(r.ore / obsidianRobotCostOre, r.clay / obsidianRobotCostClay)
+      (0 to maxToMake).map(quantity => {
+        (RobotArmy.newObsidianRobot.scale(quantity), r.use(useOre = quantity * obsidianRobotCostOre, useClay = quantity * obsidianRobotCostClay))
+      })
+    }
+
+    def buildGeodeRobotFunc(r: Resources) = {
+      //max how many can be built?
+      //if we can make 2 now, it means we chose not to make 1 earlier and let resources go idle, which is bad
+      //^^ Incorrect! After a few minutes, we can gather enough resources in one minute to make multiples!
+      val maxToMake = Math.min(r.ore / geodeRobotCostOre, r.obsidian / geodeRobotCostObsidian)
+      (0 to maxToMake).map(quantity => {
+        val n = (RobotArmy.newGeodeRobot.scale(quantity), r.use(useOre = quantity * geodeRobotCostOre, useClay = quantity * geodeRobotCostObsidian))
+        n
+      })
+    }
+
     val oreRobotCost = RobotCost(oreCost = oreRobotCostOre, clayCost = 0, obsidianCost = 0, RobotArmy.newOreRobot)
     val clayRobotCost = RobotCost(oreCost = clayRobotCostOre, clayCost = 0, obsidianCost = 0, RobotArmy.newClayRobot)
     val obsidianRobotCost = RobotCost(oreCost = obsidianRobotCostOre, clayCost = obsidianRobotCostClay, obsidianCost = 0, RobotArmy.newObsidianRobot)
@@ -102,9 +147,13 @@ object Day19 {
 
     val robotCosts = Seq(oreRobotCost, clayRobotCost, obsidianRobotCost, geodeRobotCost)
 
+    //    val oreProductionThreshold = 0 + oreRobotCostOre + clayRobotCostOre + obsidianRobotCostOre + geodeRobotCostOre
+
+    val robotFactory = RobotFactory(buildOreRobotFunc, buildClayRobotFunc, buildObsidianRobotFunc, buildGeodeRobotFunc)
+
     val startingState = RobotArmyState(Resources(0, 0, 0, 0), RobotArmy(1, 0, 0, 0))
 
-    (sToI(id), startingState, thresholds, robotCosts)
+    (sToI(id), startingState, robotFactory, thresholds, robotCosts)
   }
 }
 
@@ -205,7 +254,21 @@ case class RobotCost(oreCost: Int, clayCost: Int, obsidianCost: Int, builtRobot:
   }
 }
 
-object RobotFactory {
+case class RobotFactory(
+                         buildOre: Resources => Seq[(RobotArmy, Resources)],
+                         buildClay: Resources => Seq[(RobotArmy, Resources)],
+                         buildObsidian: Resources => Seq[(RobotArmy, Resources)],
+                         buildGeode: Resources => Seq[(RobotArmy, Resources)]
+                       ) {
+  def getBuildOptions(inputResources: Resources): Set[(RobotArmy, Resources)] = {
+
+    //for the given input Resources, find all the options for building new robots AND remaining resources
+    //keep in mind, there will always be the option to NOT build a robot
+    val possibleResults = buildOre(inputResources) ++ buildClay(inputResources) ++ buildGeode(inputResources) ++ buildObsidian(inputResources)
+    val distinctOptions = possibleResults.toSet
+    distinctOptions
+  }
+
   def getBuildOptions2(robotArmyState: RobotArmyState, robotCosts: Seq[RobotCost]) = {
     robotCosts.map(robotCost => {
       (robotCost, robotCost.minutesToGet(robotArmyState))
