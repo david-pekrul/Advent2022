@@ -6,8 +6,8 @@ import scala.collection.mutable
 
 object Day20 {
   def main(args: Array[String]): Unit = {
-    //    val originalNumbers = Helpers.readFile("day20/test.txt").map(Integer.parseInt)
-    val originalNumbers = Helpers.readFile("day20/day20.txt").map(Integer.parseInt)
+    //    val originalNumbers = Helpers.readFile("day20/test.txt").map(Integer.parseInt).map(_.toLong)
+    val originalNumbers = Helpers.readFile("day20/day20.txt").map(Integer.parseInt).map(_.toLong)
 
     val part1 = run(originalNumbers, (x: Node, size: Int) => x.move(size))
     println(s"Part 1: ${part1._1}") //1591 is correct
@@ -28,9 +28,11 @@ object Day20 {
 
     val decryptionKey = 811589153L
     val part2Original = originalNumbers.map(x => x * decryptionKey)
+    val part2 = run(part2Original, (x: Node, size: Int) => x.move2(size), loops = 10)
+    println(s"Part 2: ${part2._1}") //1591 is correct
   }
 
-  def run(originalNumbers: Seq[Int], func: (Node, Int) => Unit): (Int, Seq[String]) = {
+  def run(originalNumbers: Seq[Long], func: (Node, Int) => Unit, loops: Int = 1): (Long, Seq[String]) = {
     val numbersWithIds = originalNumbers.zipWithIndex.map(x => Node(x._1, x._2))
     val circleSize = originalNumbers.size
 
@@ -39,27 +41,28 @@ object Day20 {
     })
     numbersWithIds.head.setLeft(numbersWithIds.last)
 
-    val nodesInOperationOrder = numbersWithIds.toSeq.sortBy(_.idx)
+    val nodesInOperationOrder = numbersWithIds.sortBy(_.idx)
 
     var statesInOrder: Seq[String] = Seq()
 
-    nodesInOperationOrder.foreach(x => {
-      func(x, circleSize)
-      //      statesInOrder = statesInOrder :+ nodesInOperationOrder.toString
-      //      x.move2(numbersSize)
-      //      println(s"Move ${x.n}")
+    (1 to loops).foreach(loopNum => {
+      nodesInOperationOrder.foreach(x => {
+        func(x, circleSize)
+      })
+      //      println("loop: " + loopNum)
       //      println(nodesInOperationOrder.mkString("\r\n"))
-      //      println("~~~~~~~~~~~~~~~~~~~~~~~~~")
+      //      statesInOrder = statesInOrder :+ nodesInOperationOrder.toString() //this is for debugging between No-Mod and Use-Mod
+      //      println("~~~~~~~~~~~~~~~~~~~~~")
     })
-    //    println(nodesInOperationOrder.mkString("\r\n"))
 
     val zeroNode = nodesInOperationOrder.find(_.n == 0).get
     val thousandsPlaces = Seq(1000, 2000, 3000).map(step => zeroNode.getNodeSoManyRight(step).n)
-    (thousandsPlaces.sum, statesInOrder.toSeq)
+    println(thousandsPlaces)
+    (thousandsPlaces.sum, statesInOrder)
   }
 }
 
-case class Node(n: Int, idx: Int) {
+case class Node(n: Long, idx: Int) {
   var _left: Option[Node] = None
   var _right: Option[Node] = None
 
@@ -102,7 +105,7 @@ case class Node(n: Int, idx: Int) {
     val moveRightDistance = if (useMod) {
       loopMod(circleSize)
     } else {
-      n
+      n.intValue()
     }
     if (moveRightDistance == 0) {
       return
@@ -133,7 +136,7 @@ case class Node(n: Int, idx: Int) {
     val moveLeftDistance = if (useMod) {
       loopMod(circleSize)
     } else {
-      n
+      n.intValue()
     }
 
     if (moveLeftDistance == 0) {
@@ -164,33 +167,34 @@ case class Node(n: Int, idx: Int) {
     if (n == 0) {
       return 0 //zero is the only one that does not modify the chain
     }
+    val modDistance = (n % circleSize).intValue()
 
-    val modDistance = n % circleSize
-    val loops = Math.abs(n / circleSize).intValue()
+    //how many times does this element end up at the same INDEX, but because of swapping places, everything ELSE moves 1 "back", aka: this one moves FORWARD 1.
+    val loops = (((n) / circleSize) % (circleSize - 1)).intValue()
 
+    return modDistance + loops
+
+
+    /*
+    //Old code from part 1
+    //before I realized that moving "Mod Zero" spaces actually did move things
     if (modDistance == 0) {
       //this is not zero!
       //the element takes back it's original spot, however, the first move put it's right element in that spot.
       //[Non-Zero] % circleSize == 0 moves the element from "in front" of this node to "behind"
       //      return 0
       if (n > 0) {
-        return 1
+        return loops
       } else {
-        return -1
-      }
-
-    }
-
-    if (loops > 0) {
-      if (modDistance > 0) {
-        return modDistance + 1
-      } else {
-        return modDistance - 1
+        return -1 * loops
       }
     }
 
-    modDistance
-
+    if (modDistance > 0) {
+      return modDistance + loops
+    } else {
+      return modDistance - loops
+    }*/
   }
 
   override def toString: String = {
