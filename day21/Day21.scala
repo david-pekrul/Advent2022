@@ -2,9 +2,10 @@ package day21
 
 import helpers.Helpers
 
+import scala.annotation.tailrec
+
 object Day21 {
   def main(args: Array[String]): Unit = {
-    //    val rawLines = Helpers.readFile("day21/test.txt")
     val rawLines = Helpers.readFile("day21/day21.txt")
 
     val monkeyMap = rawLines
@@ -13,15 +14,19 @@ object Day21 {
         acc + (monkey.id -> monkey)
       })
 
-    //    println(monkeyMap.mkString("\r\n"))
-
     val rootMonkey = monkeyMap("root")
 
     val part1 = calc(rootMonkey, monkeyMap)
     println(s"Part 1: ${part1._1}")
 
     val part2Ish = calc2(rootMonkey, monkeyMap)
-    println(part2Ish);
+    val part2 = computeEqual(part2Ish._1.right.get, part2Ish._2)
+    println(s"Part 2: ${part2}")
+
+    val part2Check = calc2(rootMonkey, monkeyMap, humanValue = Some(part2))
+
+    println(s"\r\nDo the left and right match using 'humn'=${part2}?")
+    println(s"Part2 Check: ${part2Check._2(part2Check._2("root").rightId.get).num.get}  ?=  ${part2Check._2(part2Check._2("root").leftId.get).num.get}")
   }
 
   def calc(root: Monkey, monkeyMap: Map[String, Monkey]) = {
@@ -44,11 +49,17 @@ object Day21 {
     _dfs(root, monkeyMap)
   }
 
-  def calc2(root: Monkey, monkeyMap: Map[String, Monkey]) = {
+  def calc2(root: Monkey, monkeyMap: Map[String, Monkey], humanValue: Option[Long] = None) = {
 
     def _dfs(currentMonkey: Monkey, updatedMap: Map[String, Monkey]): (Either[Long, Monkey], Map[String, Monkey]) = {
       if (currentMonkey.id.equals("humn")) {
-        (Right(currentMonkey), updatedMap)
+        if (humanValue.isEmpty) {
+          (Right(currentMonkey), updatedMap)
+        } else {
+          val h = Monkey(currentMonkey.id, num = humanValue)
+          val u2 = updatedMap.updated("humn", h)
+          (Left(humanValue.get), u2)
+        }
       } else if (currentMonkey.num.isDefined) {
         (Left(currentMonkey.num.get), updatedMap)
       } else {
@@ -71,9 +82,13 @@ object Day21 {
 
   def computeEqual(root: Monkey, monkeyMap: Map[String, Monkey]): Long = {
 
-    def _compute(current: Monkey, result: Either[Long,Long]): Long = {
-
-      current.unperformOp(result)
+    @tailrec
+    def _compute(current: Monkey, result: Long): Long = {
+      if (current.id.equals("humn")) {
+        return result
+      }
+      val (newUnknownMonkey, newResult) = current.unperformOp(monkeyMap, result)
+      _compute(newUnknownMonkey, newResult)
     }
 
     val left = monkeyMap(root.leftId.get)
@@ -122,13 +137,17 @@ case class Monkey(id: String,
     (computedNum, Monkey(id = id, leftId = leftId, rightId = rightId, op = op, num = Some(computedNum)))
   }
 
-  def unperformOp(knownVal: Either[Long, Long], result: Long): Long = {
+  def unperformOp(monkeyMap: Map[String, Monkey], result: Long): (Monkey, Long) = {
 
+    val leftMonkey = monkeyMap(leftId.get)
+    val rightMonkey = monkeyMap(rightId.get)
+
+    //    print(s"$this\t\t; $result")
 
     // leftVal _op_ rightVal = result
-    if (knownVal.isRight) {
-      val rightNum = knownVal.right.get
-
+    if (rightMonkey.num.isDefined) {
+      val rightNum = rightMonkey.num.get
+      //      println(s"\t\t$rightNum")
       val computedNum = op match {
         case None => throw new RuntimeException("No operation defined")
         case Some("*") => result / rightNum //leftVal * rightNum = result
@@ -137,20 +156,21 @@ case class Monkey(id: String,
         case Some("/") => result * rightNum //left / right = result
         case Some(x) => throw new RuntimeException(s"Unrecognized $x")
       }
-      return computedNum
+      return (leftMonkey, computedNum)
     } else {
 
-      val leftNum = knownVal.left.get
+      val leftNum = leftMonkey.num.get
+      //      println(s"\t\t$leftNum")
 
       val computedNum = op match {
         case None => throw new RuntimeException("No operation defined")
         case Some("*") => result / leftNum //leftVal * rightNum = result
         case Some("+") => result - leftNum //left + right = result
-        case Some("-") => result + leftNum //left - right = result
+        case Some("-") => leftNum - result //left - right = result
         case Some("/") => leftNum / result //left / right = result
         case Some(x) => throw new RuntimeException(s"Unrecognized $x")
       }
-      return computedNum
+      return (rightMonkey, computedNum)
     }
 
   }
