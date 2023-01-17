@@ -1,16 +1,20 @@
 package day22
 
+import day22.Directions.{EAST, NORTH, SOUTH, WEST}
 import helpers.Helpers
+
+import scala.annotation.tailrec
 
 object Day22 {
   def main(args: Array[String]): Unit = {
-    val rawLines = Helpers.readFile("day22/day22.txt")
+    val rawLines = Helpers.readFile("day22/test.txt")
 
     val builtMap = parseMap(rawLines.init.init)
     val instructions = parseInstructions(rawLines.last)
 
     val initialStateCol = builtMap.rowBoundsMap(0).firstCol
-    val initialState = WalkState(Coord(0, initialStateCol), Direction('E'))
+    val initialCoord = Coord(0, initialStateCol)
+    val initialState = WalkState(initialCoord, Direction('E'))
 
     val finalState = instructions.foldLeft(initialState)((currentState, nextInstruction) => {
       nextInstruction.apply(currentState, builtMap)
@@ -19,6 +23,17 @@ object Day22 {
     println(finalState)
     val part1 = score(finalState)
     println(s"Part 1: $part1")
+
+
+    val squareSize = getSquareSize(builtMap)
+    println(s"Square Size: $squareSize")
+
+    val corners = getCorners(builtMap)
+    println(s"Corners : $corners")
+
+    val cubeFaces = getCubeFaces(initialCoord, builtMap, squareSize)
+    println(s"cubeFaces : $cubeFaces")
+
   }
 
   def parseMap(rawLines: Seq[String]) = {
@@ -95,6 +110,101 @@ object Day22 {
     (1000 * (endingState.coord.row + 1)) + (4 * (endingState.coord.col + 1)) + directionScore
 
   }
+
+  def getSquareSize(mapData: MapData): Int = {
+    mapData.rowBoundsMap.toSeq.map(_._2).map(row => {
+      row.lastCol - row.firstCol
+    }).min + 1 //convert from 0 based
+  }
+
+  def getCorners(mapData: MapData) = {
+
+    val directions = Seq(NORTH, SOUTH, EAST, WEST)
+    val diagonals = Seq(NORTH.getVector().combine(EAST.getVector()), NORTH.getVector().combine(WEST.getVector()), SOUTH.getVector().combine(EAST.getVector()), SOUTH.getVector().combine(WEST.getVector()))
+
+    val insideCorners = mapData.onTheMapCoords.keys.filter(c => {
+      directions.forall(d => mapData.onTheMapCoords.contains(c.combine(d.getVector()))) && //all directions exist
+        diagonals.exists(dg => !mapData.onTheMapCoords.contains(c.combine(dg))) //there is one diagonal that does not
+    }).toSet
+
+    val outsideCorners = mapData.onTheMapCoords.keys.filter(c => {
+      directions.filter(d => mapData.onTheMapCoords.contains(c.combine(d.getVector()))).size == 2 //only 2 directions are on the map
+    }).toSet
+
+    (insideCorners, outsideCorners)
+  }
+
+  def getCubeFaces(initialCoord: Coord, mapData: MapData, squareSize: Int) = {
+
+    val scaledVectors = Directions.ALL.map(_.getVector())
+
+    @tailrec
+    def _bfs(currentLayer: Set[(Coord, String)], cubeFaces: Set[CubeFace], adjacencies: Map[(String, Direction), (String, Direction)]): (Set[CubeFace], Map[(String, Direction), (String, Direction)]) = {
+      if (currentLayer.isEmpty) {
+        return (cubeFaces, adjacencies)
+      }
+      //convert the current anchor points into cube faces
+      val nextCubeFaces = currentLayer.map(c => buildCubeFace(c._1, c._2, mapData, squareSize))
+
+      //get the next anchor points
+      val nextLayerLabelVector = currentLayer
+        .map(c => {
+          val nextFromHere = scaledVectors.map(v => {
+            val vNext = v.scale(squareSize).combine(c._1)
+            val vector = Directions.fromCoord(v)
+            val nextLabel = CubeFace.adjacencyMap((c._2, vector))
+
+            //Label + Direction = Next + Direction.opposite
+            //when going from X -> Y, the difference in vectors encodes what the new direction modifier should be
+            val oppositeVector = Directions.fromCoord(vector.getVector().opposite)
+            val newAdjacency = Seq(
+              (c._2, vector) -> (nextLabel, vector),
+              (nextLabel, oppositeVector) -> (c._2, oppositeVector)
+            ).toMap
+
+            (vNext, nextLabel, vector, newAdjacency)
+          })
+          nextFromHere
+        })
+        .flatten
+        .filter(c => {
+          mapData.onTheMapCoords.contains(c._1)
+        })
+        .filter(c => {
+          !cubeFaces.exists(cf => cf.anchorPoint == c._1)
+        })
+
+      val newAdjacencies = nextLayerLabelVector.map(_._4).flatten.toMap
+
+      nextLayerLabelVector.map(next => {
+        next._3.getVector()
+      })
+
+
+      val nextLayer = nextLayerLabelVector.map(x => (x._1, x._2))
+      _bfs(nextLayer, cubeFaces ++ nextCubeFaces, adjacencies ++ newAdjacencies)
+    }
+
+    _bfs(Set((initialCoord, "TOP")), Set.empty, Map.empty)
+  }
+
+  def buildCubeFace(anchorPoint: Coord, label: String, mapData: MapData, squareSize: Int) = {
+    val faceCoords = (0 to squareSize - 1).flatMap(cubeFaceRow => {
+      (0 to squareSize - 1).map(cubeFaceCol => {
+        val faceCoord = Coord(cubeFaceRow, cubeFaceCol)
+        val originalCoord = anchorPoint.combine(faceCoord)
+        CubeFaceCoord(faceCoord, originalCoord, mapData.onTheMapCoords(originalCoord))
+      })
+    })
+
+    CubeFace(anchorPoint, label, faceCoords.map(f => f -> f.isRock).toMap)
+  }
+
+  def mapWraps(insideCorners: Set[Coord], outsideCorners: Set[Coord], mapData: MapData) = {
+    //Map[(Coord+Direction) -> Coord+Direction
+
+  }
+
 }
 
 
@@ -102,7 +212,21 @@ case class Coord(row: Int, col: Int) {
   def combine(other: Coord): Coord = {
     Coord(row + other.row, col + other.col)
   }
+
+  lazy val opposite = Coord(row * -1, col * -1)
+
+  //This is meant to be used for vectors and not points. I'm tool lazy to create another class.
+  def scale(scaler: Int) = {
+    Coord(row * scaler, col * scaler)
+  }
 }
+
+//object Vectors {
+//  val UP = Coord(-1, 0)
+//  val DOWN = Coord(1, 0)
+//  val LEFT = Coord(0, -1)
+//  val RIGHT = Coord(0, 1)
+//}
 
 case class MapCoord(coord: Coord, isRock: Boolean)
 
@@ -192,22 +316,36 @@ case class WalkState(coord: Coord, facing: Direction) {
   }
 }
 
+object Directions {
+  val NORTH = Direction('N')
+  val SOUTH = Direction('S')
+  val EAST = Direction('E')
+  val WEST = Direction('W')
+
+  val ALL = Seq(NORTH, SOUTH, EAST, WEST)
+
+  def fromCoord(c: Coord): Direction = {
+    val result = ALL.find(d => d.getVector() == c)
+    result.get
+  }
+}
+
 case class Direction(cardinal: Char) {
   def turnLeft(): Direction = {
     cardinal match {
-      case 'N' => Direction('W')
-      case 'E' => Direction('N')
-      case 'S' => Direction('E')
-      case 'W' => Direction('S')
+      case 'N' => WEST
+      case 'E' => NORTH
+      case 'S' => EAST
+      case 'W' => SOUTH
     }
   }
 
   def turnRight(): Direction = {
     cardinal match {
-      case 'N' => Direction('E')
-      case 'E' => Direction('S')
-      case 'S' => Direction('W')
-      case 'W' => Direction('N')
+      case 'N' => EAST
+      case 'E' => SOUTH
+      case 'S' => WEST
+      case 'W' => NORTH
     }
   }
 
@@ -219,4 +357,46 @@ case class Direction(cardinal: Char) {
       case 'W' => Coord(0, -1)
     }
   }
+}
+
+case class CubeFace(anchorPoint: Coord, label: String, facePoints: Map[CubeFaceCoord, Boolean]) {
+
+}
+
+case class CubeFaceCoord(faceCoord: Coord, originalCoord: Coord, isRock: Boolean) {
+
+}
+
+object CubeFace {
+  val adjacencyMap = Map(
+    ("TOP", NORTH) -> "BACK",
+    ("TOP", EAST) -> "RIGHT",
+    ("TOP", SOUTH) -> "FRONT",
+    ("TOP", WEST) -> "LEFT",
+
+    ("FRONT", NORTH) -> "TOP",
+    ("FRONT", EAST) -> "RIGHT",
+    ("FRONT", SOUTH) -> "BOTTOM",
+    ("FRONT", WEST) -> "LEFT",
+
+    ("BOTTOM", NORTH) -> "FRONT",
+    ("BOTTOM", EAST) -> "RIGHT",
+    ("BOTTOM", SOUTH) -> "BACK",
+    ("BOTTOM", WEST) -> "LEFT",
+
+    ("BACK", NORTH) -> "BOTTOM",
+    ("BACK", EAST) -> "RIGHT",
+    ("BACK", SOUTH) -> "TOP",
+    ("BACK", WEST) -> "LEFT",
+
+    ("RIGHT", NORTH) -> "TOP",
+    ("RIGHT", EAST) -> "BACK",
+    ("RIGHT", SOUTH) -> "BOTTOM",
+    ("RIGHT", WEST) -> "FRONT",
+
+    ("LEFT", NORTH) -> "TOP",
+    ("LEFT", EAST) -> "FRONT",
+    ("LEFT", SOUTH) -> "BOTTOM",
+    ("LEFT", WEST) -> "BACK"
+  )
 }
